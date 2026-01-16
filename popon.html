@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Block Blast High Score 👑</title>
+    <style>
+        :root { --bg: #0f172a; --board: #1e293b; --accent: #fbbf24; --danger: #ff4757; }
+        body { margin: 0; background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; overflow: hidden; touch-action: none; }
+        .header { text-align: center; padding: 10px; }
+        .high-score { font-size: 1rem; color: var(--accent); opacity: 0.9; margin-bottom: 5px; }
+        .score-box { font-size: 3.5rem; font-weight: 900; line-height: 1; margin-bottom: 10px; }
+        #grid { display: grid; grid-template-columns: repeat(8, 45px); grid-template-rows: repeat(8, 45px); gap: 4px; background: var(--board); padding: 12px; border-radius: 15px; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .cell { width: 45px; height: 45px; background: rgba(255,255,255,0.03); border-radius: 8px; }
+        #piece-container { display: flex; justify-content: space-around; align-items: center; width: 100%; max-width: 400px; margin-top: 30px; height: 130px; background: rgba(255,255,255,0.05); border-radius: 20px; }
+        .piece { position: relative; display: grid; gap: 3px; cursor: grab; }
+        .p-cell { width: 22px; height: 22px; border-radius: 5px; pointer-events: none; }
+        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 5000; }
+        #unbelievable { position: fixed; top: 35%; font-size: 3.5rem; font-weight: 900; color: var(--accent); display: none; z-index: 2000; text-shadow: 0 0 30px var(--accent); animation: pop 0.8s ease-out; }
+        .btn-start { padding: 15px 45px; border-radius: 50px; border: none; background: #00f2fe; font-weight: bold; font-size: 1.2rem; cursor: pointer; box-shadow: 0 5px 15px rgba(0,242,254,0.4); }
+        @keyframes pop { 0% { transform: scale(0); opacity: 0; } 70% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="high-score">🏆 BEST: <span id="highScore">0</span></div>
+        <div class="score-box" id="score">0</div>
+    </div>
+
+    <div id="grid"></div>
+    <div id="unbelievable">ANPALIBEBEL!</div>
+    <div id="piece-container">
+        <button class="btn-start" onclick="startGame()">START GAME</button>
+    </div>
+
+    <div id="gameOverScreen" class="overlay">
+        <h2 style="font-size: 3.5rem; color: var(--danger); margin: 0;">KALAH!</h2>
+        <p style="font-size: 1.5rem;">Skor: <span id="finalScore">0</span></p>
+        <button class="btn-start" onclick="location.reload()">MAIN LAGI</button>
+    </div>
+
+    <audio id="bgMusic" loop>
+        <source src="http://googleusercontent.com/file_content/0" type="audio/mpeg">
+    </audio>
+
+    <script>
+        const gridEl = document.getElementById('grid');
+        const pieceContainer = document.getElementById('piece-container');
+        const scoreEl = document.getElementById('score');
+        const highScoreEl = document.getElementById('highScore');
+        const unabelEl = document.getElementById('unbelievable');
+        const bgMusic = document.getElementById('bgMusic');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+
+        let score = 0;
+        let board = Array(64).fill(null);
+        let piecesInHand = [];
+
+        const shapes = [
+            { s: [[0,0], [0,1], [1,0], [1,1]], c: '#ff4757' },
+            { s: [[0,0], [0,1], [0,2], [0,3]], c: '#2ecc71' },
+            { s: [[0,0], [1,0], [2,0]],        c: '#3498db' },
+            { s: [[0,0], [1,0], [1,1]],        c: '#f1c40f' },
+            { s: [[0,0]],                      c: '#00f2fe' }
+        ];
+
+        // Load High Score dari Memori HP
+        let highScore = localStorage.getItem('popon_highscore') || 0;
+        highScoreEl.innerText = highScore;
+
+        function speak(text) {
+            const msg = new SpeechSynthesisUtterance(text);
+            msg.pitch = 0.6; msg.rate = 0.8;
+            window.speechSynthesis.speak(msg);
+        }
+
+        function startGame() {
+            bgMusic.play(); // Auto-play musik
+            initBoard();
+            spawnSet();
+        }
+
+        function initBoard() {
+            gridEl.innerHTML = '';
+            for(let i=0; i<64; i++) {
+                const c = document.createElement('div');
+                c.className = 'cell';
+                gridEl.appendChild(c);
+            }
+        }
+
+        function spawnSet() {
+            pieceContainer.innerHTML = '';
+            piecesInHand = [];
+            for(let i=0; i<3; i++) {
+                const data = shapes[Math.floor(Math.random()*shapes.length)];
+                const pieceData = {...data, id: Date.now() + i};
+                piecesInHand.push(pieceData);
+                createPieceUI(pieceData);
+            }
+            checkGameOver();
+        }
+
+        function createPieceUI(data) {
+            const p = document.createElement('div');
+            p.className = 'piece';
+            const r = Math.max(...data.s.map(s => s[0]))+1;
+            const c = Math.max(...data.s.map(s => s[1]))+1;
+            p.style.gridTemplateRows = `repeat(${r}, 22px)`;
+            p.style.gridTemplateColumns = `repeat(${c}, 22px)`;
+            data.s.forEach(s => {
+                const sc = document.createElement('div');
+                sc.className = 'p-cell';
+                sc.style.backgroundColor = data.c;
+                sc.style.gridRowStart = s[0]+1; sc.style.gridColumnStart = s[1]+1;
+                p.appendChild(sc);
+            });
+            handleDrag(p, data);
+            pieceContainer.appendChild(p);
+        }
+
+        function handleDrag(el, data) {
+            let ox, oy;
+            el.onpointerdown = (e) => {
+                el.setPointerCapture(e.pointerId);
+                const rect = el.getBoundingClientRect();
+                ox = e.clientX - rect.left; oy = e.clientY - rect.top;
+            };
+            el.onpointermove = (e) => {
+                if (e.buttons !== 1) return;
+                el.style.position = 'fixed';
+                el.querySelectorAll('.p-cell').forEach(c => { c.style.width = '45px'; c.style.height = '45px'; });
+                el.style.gridTemplateRows = `repeat(4, 45px)`;
+                el.style.gridTemplateColumns = `repeat(4, 45px)`;
+                el.style.left = (e.clientX - ox) + 'px';
+                el.style.top = (e.clientY - oy - 70) + 'px';
+            };
+            el.onpointerup = (e) => {
+                const rect = gridEl.getBoundingClientRect();
+                const col = Math.round(((e.clientX - ox) - rect.left) / 49);
+                const row = Math.round(((e.clientY - oy - 70) - rect.top) / 49);
+                if (tryPlace(data, row, col)) {
+                    el.remove();
+                    piecesInHand = piecesInHand.filter(p => p.id !== data.id);
+                    if (piecesInHand.length === 0) spawnSet();
+                    checkBlast();
+                } else {
+                    el.style.position = 'relative'; el.style.left = '0'; el.style.top = '0';
+                    el.querySelectorAll('.p-cell').forEach(c => { c.style.width = '22px'; c.style.height = '22px'; });
+                    el.style.gridTemplateRows = `repeat(4, 22px)`;
+                }
+            };
+        }
+
+        function tryPlace(data, r, c) {
+            if (data.s.every(s => {
+                let nr = r + s[0], nc = c + s[1];
+                return nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && !board[nr*8+nc];
+            })) {
+                data.s.forEach(s => {
+                    const idx = (r+s[0])*8 + (c+s[1]);
+                    board[idx] = data.c;
+                    gridEl.children[idx].style.backgroundColor = data.c;
+                });
+                return true;
+            }
+            return false;
+        }
+
+        function checkBlast() {
+            let rs = [], cs = [];
+            for(let i=0; i<8; i++) {
+                if(board.slice(i*8, (i+1)*8).every(v => v)) rs.push(i);
+                let full = true; for(let j=0; j<8; j++) if(!board[j*8+i]) full = false;
+                if(full) cs.push(i);
+            }
+            rs.forEach(r => { for(let j=0; j<8; j++) clearC(r*8+j); });
+            cs.forEach(c => { for(let j=0; j<8; j++) clearC(j*8+c); });
+            if(rs.length || cs.length) {
+                score += (rs.length + cs.length) * 100;
+                scoreEl.innerText = score;
+                if(score > highScore) {
+                    highScore = score;
+                    highScoreEl.innerText = highScore;
+                    localStorage.setItem('popon_highscore', highScore);
+                }
+                if(board.every(v => !v)) { unabelEl.style.display='block'; speak("Unbelievable"); setTimeout(()=>unabelEl.style.display='none',1500); }
+            }
+            checkGameOver();
+        }
+
+        function clearC(i) { board[i]=null; gridEl.children[i].style.backgroundColor='rgba(255,255,255,0.03)'; }
+
+        function checkGameOver() {
+            let can = false;
+            for (let p of piecesInHand) {
+                for (let i = 0; i < 64; i++) {
+                    let r = Math.floor(i / 8), c = i % 8;
+                    if (p.s.every(s => {
+                        let nr = r+s[0], nc = c+s[1];
+                        return nr < 8 && nc < 8 && !board[nr*8+nc];
+                    })) { can = true; break; }
+                }
+                if (can) break;
+            }
+            if (!can && piecesInHand.length > 0) { 
+                document.getElementById('finalScore').innerText = score;
+                gameOverScreen.style.display = 'flex'; speak("Game Over"); 
+            }
+        }
+
+        initBoard();
+    </script>
+</body>
+</html>
